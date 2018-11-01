@@ -1,4 +1,4 @@
-# Official VirtualHost configuration for Apache 2.x template
+# Official VirtualHost configuration for Apache 2.4 template
 # See Readme.md for how to generate your config manually, or in automated deployments.
 # Note: This is meant to be manually tailored for your needs, expires headers might for instance not work for your dev setup.
 
@@ -17,31 +17,36 @@
     TimeOut %TIMEOUT%
 
     # Enabled for Dev environment
-    # LogLevel debug
+    #LogLevel debug
 
     # "web" folder is what we expose to the world, all rewrite rules further down is relative to it.
     <Directory %BASEDIR%/web>
-        # If using php configured in FastCGI mode, you might also need to add "ExecCGI" to the line below
+        <FilesMatch \.php$>
+            # For serving php files configure mod_proxy to talk to php-fpm using Apache 2.4.10 and higher.
+            # See: https://wiki.apache.org/httpd/PHP-FPM#apache_httpd_2.4
+
+            # For best performance, prefer socket use. This requires Linux, and that both Apache and PHP has access to
+            # the socket file `/var/run/php5-fpm.sock` via local file system and hence run on the same machine.
+            #SetHandler "proxy:unix:/var/run/php5-fpm.sock|fcgi://localhost/"
+            # For TCP usage, if you're not on Linux, or Apache and PHP are on separate machines, instead use fcgi: form.
+            # (Optionally hint php-fpm processes count using: https://wiki.apache.org/httpd/PHP-FPM#Proxy_via_handler)
+            #SetHandler "proxy:fcgi://localhost/:9000"
+
+            SetHandler "proxy:%FASTCGI_PASS%|fcgi://localhost/"
+        </FilesMatch>
+
         Options FollowSymLinks
         AllowOverride None
-        # Depending on your global Apache settings, you may need to uncomment and adapt:
-        #  for Apache 2.2 and earlier:
-        #Allow from all
-        #  for Apache 2.4:
-        #Require all granted
+        Require all granted
     </Directory>
 
-    ## eZ Platform/Symfony ENVIRONMENT variables, used for customizing app.php execution (not used by console commands)
+    ## eZ Platform/Symfony ENVIRONMENT variables, for customizing app.php* execution
+    # * Only SYMFONY_ENV and SYMFONY_DEBUG supported by console command, rest are eZ Platform features in app.php.
 
     # Environment.
     # Possible values: "prod" and "dev" out-of-the-box, other values possible with proper configuration
     # Defaults to "prod" if omitted (uses SetEnvIf so value can be used in rewrite rules)
     #if[SYMFONY_ENV] SetEnvIf Request_URI ".*" SYMFONY_ENV=%SYMFONY_ENV%
-
-    # Optional: Whether to use custom ClassLoader (autoloader) file
-    # Needs to be a valid path relative to root web/ directory
-    # Defaults to bootstrap.php.cache, or autoload.php in debug if env value is omitted or empty
-    #if[SYMFONY_CLASSLOADER_FILE] SetEnv SYMFONY_CLASSLOADER_FILE "%SYMFONY_CLASSLOADER_FILE%"
 
     # Optional: Whether to use debugging.
     # Possible values: 0, 1 or ""
@@ -55,16 +60,15 @@
     # and if this env value is omitted or empty
     #if[SYMFONY_HTTP_CACHE] SetEnv SYMFONY_HTTP_CACHE "%SYMFONY_HTTP_CACHE%"
 
-    # Optional: Whether to use custom HTTP Cache class if SYMFONY_HTTP_CACHE is enabled
-    # Value must be a autoloadable cache class
-    # Defaults to to use provided "AppCache" if env value is omitted or empty
-    #if[SYMFONY_HTTP_CACHE_CLASS] SetEnv SYMFONY_HTTP_CACHE_CLASS "%SYMFONY_HTTP_CACHE_CLASS%"
-
     # Optional: Defines the proxies to trust
     # Needed when using Varnish as proxy, if so disable SYMFONY_HTTP_CACHE.
-    # Separate entries by a comma, example: "proxy1.example.com,proxy2.example.org"
+    # Separate entries by a comma, example: "ip1,ip2"
     # Defaults to not be set if env value is omitted or empty
     #if[SYMFONY_TRUSTED_PROXIES] SetEnv SYMFONY_TRUSTED_PROXIES "%SYMFONY_TRUSTED_PROXIES%"
+
+    # TIP: There are many more environment variables supported by eZ Platform. However unlike those listed above
+    #      they should in most cases rather be set in the environment then in vhost config to make sure cronjobs
+    #      and cli command usage takes them into account as well.
 
     <IfModule mod_rewrite.c>
         RewriteEngine On
@@ -78,23 +82,16 @@
 
         RewriteRule ^/var/([^/]+/)?storage/images(-versioned)?/.* - [L]
 
-        # Makes it possible to place your favicon at the root of your eZ Platform instance.
-        # It will then be served directly.
+        # Makes it possible to placed your favicon and robots.txt at the root of your web folder
         RewriteRule ^/favicon\.ico - [L]
-
-        # Give direct access to robots.txt for use by crawlers (Google, Bing, Spammers...)
         RewriteRule ^/robots\.txt - [L]
 
-        # Platform for Privacy Preferences Project ( P3P ) related files for Internet Explorer
-        # More info here : http://en.wikipedia.org/wiki/P3p
-        RewriteRule ^/w3c/p3p\.xml - [L]
-
-        # The following rule is needed to correctly display bundle and project assets
+        # The following rules are needed to correctly display bundle and project assets
         RewriteRule ^/bundles/ - [L]
         RewriteRule ^/assets/ - [L]
 
         # Additional Assetic rules for environments different from dev,
-        # remember to run php app/console assetic:dump --env=prod
+        # remember to run php bin/console assetic:dump --env=prod
         RewriteCond %{ENV:SYMFONY_ENV} !^(dev)
         RewriteRule ^/(css|js|fonts?)/.*\.(css|js|otf|eot|ttf|svg|woff) - [L]
 

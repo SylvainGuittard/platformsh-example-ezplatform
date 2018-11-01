@@ -62,3 +62,20 @@ services:
         class: AppBundle\Twig\ContentInfoByLocationIdExtension
         arguments:
             - '@ezpublish.api.service.location'
+            - '@ezpublish.api.service.content'
+
+    AppBundle\Twig\YoutubeIdExtractorExtension:
+        tags:
+            - { name: twig.extension }
+
+
+    AppBundle\PremiumContent\HtmlRenderer: ~
+    AppBundle\User\UserGroups: ~
+
+    AppBundle\Twig\PremiumContentExtension:
+        arguments:
+            - '@AppBundle\PremiumContent\HtmlRenderer'
+            - '@AppBundle\User\UserGroups'
+            - '%app.premium_content.allowed_user_groups.location_ids%'
+        tags:
+            - { name: twig.extension }
